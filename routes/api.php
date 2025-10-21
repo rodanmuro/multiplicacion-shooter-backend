@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\GameSessionController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -23,5 +24,11 @@ Route::get('/test', function () {
     ]);
 });
 
-// Rutas de autenticación
+// Rutas de autenticación (públicas)
 Route::post('/auth/verify', [AuthController::class, 'verify']);
+
+// Rutas protegidas con autenticación Google
+Route::middleware('auth.google')->group(function () {
+    // Sesiones de juego
+    Route::post('/sessions', [GameSessionController::class, 'store']);
+});

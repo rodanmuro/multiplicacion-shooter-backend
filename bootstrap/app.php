@@ -15,6 +15,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [
             \Illuminate\Http\Middleware\HandleCors::class,
         ]);
+
+        // Alias para middleware de autenticación Google
+        $middleware->alias([
+            'auth.google' => \App\Http\Middleware\ValidateGoogleToken::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

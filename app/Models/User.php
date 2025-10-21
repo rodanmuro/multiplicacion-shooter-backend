@@ -62,12 +62,11 @@ class User extends Model
 
     /**
      * Relación: Un usuario tiene muchas sesiones de juego
-     * TODO: Descomentar en INCREMENTO 2 cuando se cree GameSession
      */
-    // public function gameSessions(): HasMany
-    // {
-    //     return $this->hasMany(GameSession::class);
-    // }
+    public function gameSessions(): HasMany
+    {
+        return $this->hasMany(GameSession::class);
+    }
 
     /**
      * Verifica si el usuario es administrador
