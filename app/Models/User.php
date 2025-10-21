@@ -2,36 +2,42 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class User extends Authenticatable
+/**
+ * Modelo User
+ * Representa un usuario autenticado con Google OAuth
+ */
+class User extends Model
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable;
+    use HasFactory;
+
+    // Constantes de perfiles
+    const PROFILE_STUDENT = 'student';
+    const PROFILE_TEACHER = 'teacher';
+    const PROFILE_ADMIN = 'admin';
 
     /**
      * The attributes that are mass assignable.
      *
-     * @var list<string>
+     * @var array<string>
      */
     protected $fillable = [
-        'name',
+        'google_id',
         'email',
-        'password',
+        'name',
+        'picture',
+        'profile'
     ];
 
     /**
      * The attributes that should be hidden for serialization.
      *
-     * @var list<string>
+     * @var array<string>
      */
-    protected $hidden = [
-        'password',
-        'remember_token',
-    ];
+    protected $hidden = [];
 
     /**
      * Get the attributes that should be cast.
@@ -41,8 +47,49 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'created_at' => 'datetime',
+            'updated_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Relación: Un usuario tiene muchos logins
+     */
+    public function logins(): HasMany
+    {
+        return $this->hasMany(UserLogin::class);
+    }
+
+    /**
+     * Relación: Un usuario tiene muchas sesiones de juego
+     * TODO: Descomentar en INCREMENTO 2 cuando se cree GameSession
+     */
+    // public function gameSessions(): HasMany
+    // {
+    //     return $this->hasMany(GameSession::class);
+    // }
+
+    /**
+     * Verifica si el usuario es administrador
+     */
+    public function isAdmin(): bool
+    {
+        return $this->profile === self::PROFILE_ADMIN;
+    }
+
+    /**
+     * Verifica si el usuario es profesor
+     */
+    public function isTeacher(): bool
+    {
+        return $this->profile === self::PROFILE_TEACHER;
+    }
+
+    /**
+     * Verifica si el usuario es estudiante
+     */
+    public function isStudent(): bool
+    {
+        return $this->profile === self::PROFILE_STUDENT;
     }
 }

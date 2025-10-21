@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -14,9 +15,13 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+// Ruta de prueba
 Route::get('/test', function () {
     return response()->json([
         'message' => 'API is working!',
         'timestamp' => now()
     ]);
 });
+
+// Rutas de autenticación
+Route::post('/auth/verify', [AuthController::class, 'verify']);
