@@ -26,7 +26,9 @@ class GameSession extends Model
         'finished_at',
         'final_score',
         'max_level_reached',
-        'duration_seconds'
+        'duration_seconds',
+        'canvas_width',
+        'canvas_height',
     ];
 
     /**
@@ -61,12 +63,11 @@ class GameSession extends Model
 
     /**
      * Relación: Una sesión tiene muchos disparos
-     * TODO: Descomentar en INCREMENTO 3 cuando se cree Shot
      */
-    // public function shots(): HasMany
-    // {
-    //     return $this->hasMany(Shot::class);
-    // }
+    public function shots(): HasMany
+    {
+        return $this->hasMany(Shot::class);
+    }
 
     /**
      * Verifica si la sesión está activa (no ha terminado)

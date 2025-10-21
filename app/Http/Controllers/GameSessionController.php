@@ -23,7 +23,9 @@ class GameSessionController extends Controller
     {
         // Validar datos de entrada
         $validated = $request->validate([
-            'started_at' => 'required|date'
+            'started_at' => 'required|date',
+            'canvas_width' => 'required|integer|min:1|max:10000',
+            'canvas_height' => 'required|integer|min:1|max:10000',
         ]);
 
         // Obtener usuario autenticado del middleware
@@ -42,7 +44,9 @@ class GameSessionController extends Controller
             'started_at' => $validated['started_at'],
             'final_score' => 0,
             'max_level_reached' => 1,
-            'duration_seconds' => 0
+            'duration_seconds' => 0,
+            'canvas_width' => $validated['canvas_width'],
+            'canvas_height' => $validated['canvas_height']
         ]);
 
         return response()->json([

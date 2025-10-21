@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\GameSessionController;
+use App\Http\Controllers\ShotController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -31,4 +32,7 @@ Route::post('/auth/verify', [AuthController::class, 'verify']);
 Route::middleware('auth.google')->group(function () {
     // Sesiones de juego
     Route::post('/sessions', [GameSessionController::class, 'store']);
+
+    // Disparos dentro de una sesión
+    Route::post('/sessions/{id}/shots', [ShotController::class, 'store']);
 });
