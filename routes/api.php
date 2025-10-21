@@ -32,6 +32,7 @@ Route::post('/auth/verify', [AuthController::class, 'verify']);
 Route::middleware('auth.google')->group(function () {
     // Sesiones de juego
     Route::post('/sessions', [GameSessionController::class, 'store']);
+    Route::put('/sessions/{id}/finish', [GameSessionController::class, 'finish']);
 
     // Disparos dentro de una sesión
     Route::post('/sessions/{id}/shots', [ShotController::class, 'store']);

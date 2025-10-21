@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\GameSession;
+use App\Models\Shot;
 use App\Models\User;
+use App\Http\Requests\FinishSessionRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -53,5 +55,76 @@ class GameSessionController extends Controller
             'success' => true,
             'data' => $session
         ], 201);
+    }
+
+    /**
+     * Finalizar una sesión de juego
+     *
+     * @param FinishSessionRequest $request
+     * @param int $id
+     * @return JsonResponse
+     */
+    public function finish(FinishSessionRequest $request, int $id): JsonResponse
+    {
+        // Usuario autenticado provisto por el middleware
+        $user = $request->input('authenticated_user');
+
+        if (!$user instanceof User) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Usuario no autenticado'
+            ], 401);
+        }
+
+        // Buscar sesión
+        $session = GameSession::find($id);
+        if (!$session) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Sesión no encontrada'
+            ], 404);
+        }
+
+        // Validar pertenencia
+        if ($session->user_id !== $user->id) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Acceso prohibido a la sesión especificada'
+            ], 403);
+        }
+
+        // Validar que esté activa
+        if (!$session->isActive()) {
+            return response()->json([
+                'success' => false,
+                'error' => 'La sesión ya ha finalizado'
+            ], 400);
+        }
+
+        // Actualizar datos finales
+        $data = $request->validated();
+
+        $session->finished_at = $data['finished_at'];
+        $session->final_score = $data['final_score'];
+        $session->max_level_reached = $data['max_level_reached'];
+        $session->duration_seconds = $data['duration_seconds'];
+        $session->save();
+
+        // Calcular estadísticas basadas en shots
+        $totalShots = Shot::where('game_session_id', $session->id)->count();
+        $correctShots = Shot::where('game_session_id', $session->id)->where('is_correct', true)->count();
+        $wrongShots = $totalShots - $correctShots;
+        $accuracy = $totalShots > 0 ? round(($correctShots * 100.0) / $totalShots, 2) : 0.0;
+
+        $responseData = $session->toArray();
+        $responseData['total_shots'] = $totalShots;
+        $responseData['correct_shots'] = $correctShots;
+        $responseData['wrong_shots'] = $wrongShots;
+        $responseData['accuracy'] = $accuracy;
+
+        return response()->json([
+            'success' => true,
+            'data' => $responseData
+        ], 200);
     }
 }
