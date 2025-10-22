@@ -3,7 +3,6 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\GameSessionController;
 use App\Http\Controllers\ShotController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -31,6 +30,8 @@ Route::post('/auth/verify', [AuthController::class, 'verify']);
 // Rutas protegidas con autenticación Google
 Route::middleware('auth.google')->group(function () {
     // Sesiones de juego
+    Route::get('/sessions', [GameSessionController::class, 'index']);
+    Route::get('/sessions/{id}', [GameSessionController::class, 'show']);
     Route::post('/sessions', [GameSessionController::class, 'store']);
     Route::put('/sessions/{id}/finish', [GameSessionController::class, 'finish']);
 
