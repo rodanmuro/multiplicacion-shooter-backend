@@ -28,8 +28,10 @@ class User extends Model
         'google_id',
         'email',
         'name',
+        'lastname',
         'picture',
-        'profile'
+        'profile',
+        'group'
     ];
 
     /**

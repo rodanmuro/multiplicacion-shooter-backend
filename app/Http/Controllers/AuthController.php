@@ -42,15 +42,33 @@ class AuthController extends Controller
             $googleUser = $this->googleAuthService->verifyToken($request->token);
 
             // 2. Buscar o crear usuario en la base de datos
-            $user = User::firstOrCreate(
-                ['google_id' => $googleUser['sub']], // Buscar por google_id
-                [
+            // Primero buscar por google_id
+            $user = User::where('google_id', $googleUser['sub'])->first();
+
+            // Si no existe por google_id, buscar por email (para usuarios creados por CSV)
+            if (!$user) {
+                $user = User::where('email', $googleUser['email'])->first();
+            }
+
+            // Si existe, actualizar datos de Google
+            if ($user) {
+                $user->update([
+                    'google_id' => $googleUser['sub'],
+                    'name' => $googleUser['given_name'] ?? $googleUser['name'],
+                    'lastname' => $googleUser['family_name'] ?? null,
+                    'picture' => $googleUser['picture']
+                ]);
+            } else {
+                // Si no existe, crear nuevo usuario
+                $user = User::create([
+                    'google_id' => $googleUser['sub'],
                     'email' => $googleUser['email'],
-                    'name' => $googleUser['name'],
+                    'name' => $googleUser['given_name'] ?? $googleUser['name'],
+                    'lastname' => $googleUser['family_name'] ?? null,
                     'picture' => $googleUser['picture'],
-                    'profile' => User::PROFILE_STUDENT // Por defecto: student
-                ]
-            );
+                    'profile' => User::PROFILE_STUDENT
+                ]);
+            }
 
             // 3. SIEMPRE registrar el login (aunque el usuario ya exista)
             UserLogin::create([

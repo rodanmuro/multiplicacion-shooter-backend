@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Alias para middleware de autenticación Google
         $middleware->alias([
             'auth.google' => \App\Http\Middleware\ValidateGoogleToken::class,
+            'require.admin' => \App\Http\Middleware\RequireAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
