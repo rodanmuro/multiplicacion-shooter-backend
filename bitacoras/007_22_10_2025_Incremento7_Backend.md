@@ -76,6 +76,36 @@ Route::middleware(['auth.google', 'require.admin'])->prefix('admin')->group(func
 });
 ```
 
+#### Endpoints de Diagnóstico
+
+**Agregados para facilitar despliegue y troubleshooting:**
+
+**a) Test Endpoint**
+```php
+GET /api/test
+```
+- Endpoint básico para verificar que Laravel está respondiendo
+- Retorna mensaje simple y timestamp
+- No requiere base de datos ni autenticación
+
+**b) Health Check Endpoint**
+```php
+GET /api/health
+```
+- Endpoint completo de diagnóstico del sistema
+- Verifica múltiples aspectos del servidor:
+  - **Laravel:** Framework funcionando
+  - **PHP Version:** Versión de PHP instalada
+  - **Database:** Conexión a base de datos
+  - **Storage writable:** Permisos de escritura en `storage/logs`
+  - **Cache writable:** Permisos de escritura en `storage/framework/cache`
+  - **ENV loaded:** Archivo .env cargado correctamente
+  - **APP_KEY set:** Key de aplicación configurada
+  - **Database name:** Nombre de la base de datos conectada
+  - **Tables:** Verifica existencia de tablas principales (users, game_sessions, shots)
+- Retorna código HTTP 200 si todo está "healthy", 500 si hay problemas
+- Útil para verificar despliegues en producción
+
 ### 4. Migraciones de Base de Datos
 
 #### a) Campos lastname y group
@@ -252,6 +282,7 @@ php artisan migrate
 - **Soft Deletes:** No implementado (puede agregarse en futuro)
 - **Índices:** Agregados en `email` y `group` para mejorar performance
 - **CSV Encoding:** Soporta UTF-8, usar `str_getcsv` para parsing
+- **Health Check:** Los endpoints `/test` y `/health` son públicos y no requieren autenticación, útiles para monitoreo y despliegues
 
 ---
 

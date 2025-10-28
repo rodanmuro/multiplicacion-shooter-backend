@@ -5,6 +5,8 @@ use App\Http\Controllers\GameSessionController;
 use App\Http\Controllers\ShotController;
 use App\Http\Controllers\AdminController;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /*
 |--------------------------------------------------------------------------
@@ -23,6 +25,50 @@ Route::get('/test', function () {
         'message' => 'API is working!',
         'timestamp' => now()
     ]);
+});
+
+// Health check endpoint
+Route::get('/health', function () {
+    $checks = [
+        'laravel' => true,
+        'php_version' => PHP_VERSION,
+        'database' => false,
+        'storage_writable' => is_writable(storage_path('logs')),
+        'cache_writable' => is_writable(storage_path('framework/cache')),
+        'env_loaded' => config('app.key') !== null,
+        'app_key_set' => !empty(config('app.key')),
+    ];
+
+    // Verificar conexión a base de datos
+    try {
+        DB::connection()->getPdo();
+        $checks['database'] = true;
+        $checks['database_name'] = DB::connection()->getDatabaseName();
+
+        // Verificar que las tablas principales existen
+        $checks['tables'] = [
+            'users' => Schema::hasTable('users'),
+            'game_sessions' => Schema::hasTable('game_sessions'),
+            'shots' => Schema::hasTable('shots'),
+        ];
+    } catch (\Exception $e) {
+        $checks['database_error'] = $e->getMessage();
+    }
+
+    // Determinar status general
+    $allHealthy = $checks['laravel']
+        && $checks['database']
+        && $checks['storage_writable']
+        && $checks['cache_writable']
+        && $checks['env_loaded']
+        && $checks['app_key_set'];
+
+    return response()->json([
+        'status' => $allHealthy ? 'healthy' : 'unhealthy',
+        'checks' => $checks,
+        'timestamp' => now(),
+        'environment' => config('app.env'),
+    ], $allHealthy ? 200 : 500);
 });
 
 // Rutas de autenticación (públicas)
