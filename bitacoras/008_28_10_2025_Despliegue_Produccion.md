@@ -394,11 +394,109 @@ echo Artisan::output();
 
 ---
 
+## Problema y Solución - Estadísticas de Sesiones en Admin Panel
+
+**Fecha:** 28 de octubre de 2025
+
+### Problema Encontrado
+
+Al acceder a las estadísticas de un estudiante desde el panel de administración, se presentaba el siguiente error:
+
+```
+TypeError: can't access property "toString", o.total_shots is undefined
+```
+
+**Archivo afectado:** [AdminScene.ts:453](../../multiplicacion-shooter-frontend/src/scenes/AdminScene.ts#L453)
+
+**Causa:**
+El frontend esperaba campos agregados en cada sesión (`total_shots`, `correct_shots`, `wrong_shots`, `accuracy`), pero el backend solo retornaba el array `shots` sin calcular estas estadísticas.
+
+**Respuesta del backend (incorrecta):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 5,
+      "final_score": 600,
+      "shots": [
+        {"id": 47, "is_correct": true, ...},
+        {"id": 48, "is_correct": true, ...}
+      ]
+      // Faltaban: total_shots, correct_shots, wrong_shots, accuracy
+    }
+  ]
+}
+```
+
+### Solución Implementada
+
+**Archivo modificado:** [AdminController.php:84-108](../app/Http/Controllers/AdminController.php#L84-L108)
+
+Se agregó procesamiento para calcular estadísticas agregadas en el método `getUserSessions()`:
+
+```php
+// Agregar estadísticas calculadas a cada sesión
+$sessionsWithStats = $sessions->getCollection()->map(function ($session) {
+    $totalShots = $session->shots->count();
+    $correctShots = $session->shots->where('is_correct', true)->count();
+    $wrongShots = $totalShots - $correctShots;
+    $accuracy = $totalShots > 0 ? round(($correctShots / $totalShots) * 100, 2) : 0;
+
+    return [
+        'id' => $session->id,
+        'user_id' => $session->user_id,
+        'started_at' => $session->started_at,
+        'finished_at' => $session->finished_at,
+        'final_score' => $session->final_score,
+        'max_level_reached' => $session->max_level_reached,
+        'duration_seconds' => $session->duration_seconds,
+        'canvas_width' => $session->canvas_width,
+        'canvas_height' => $session->canvas_height,
+        'total_shots' => $totalShots,
+        'correct_shots' => $correctShots,
+        'wrong_shots' => $wrongShots,
+        'accuracy' => $accuracy,
+        'created_at' => $session->created_at,
+        'updated_at' => $session->updated_at,
+    ];
+});
+```
+
+**Respuesta del backend (correcta):**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 5,
+      "final_score": 600,
+      "total_shots": 109,
+      "correct_shots": 60,
+      "wrong_shots": 49,
+      "accuracy": 55.05
+    }
+  ]
+}
+```
+
+### Resultado
+
+✅ El panel de administración ahora muestra correctamente:
+- Disparos totales
+- Aciertos
+- Precisión (%)
+
+✅ Error resuelto en producción
+
+---
+
 ## Próximos Pasos
 
-- [ ] Eliminar archivos de diagnóstico temporal
-- [ ] Configurar frontend para usar URL base de producción
-- [ ] Crear usuario administrador para pruebas
+- [x] Eliminar archivos de diagnóstico temporal
+- [x] Configurar frontend para usar URL base de producción
+- [x] Crear usuario administrador para pruebas
+- [x] Fix estadísticas del admin panel
 - [ ] Implementar GitHub Actions para despliegues automatizados
 - [ ] Considerar script `migrate.php` para futuras actualizaciones
 - [ ] Documentar proceso de rollback en caso de errores
@@ -412,6 +510,7 @@ echo Artisan::output();
 ✅ **Base de datos configurada y migraciones aplicadas**
 ✅ **Sistema de salud (health check) operativo**
 ✅ **Solución implementada para subdirectorio**
+✅ **Panel de administración funcionando completamente**
 
 El backend está completamente operativo en producción y listo para ser consumido por el frontend.
 

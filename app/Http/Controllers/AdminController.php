@@ -81,6 +81,32 @@ class AdminController extends Controller
                 ->orderBy('started_at', 'desc')
                 ->paginate(10);
 
+            // Agregar estadísticas calculadas a cada sesión
+            $sessionsWithStats = $sessions->getCollection()->map(function ($session) {
+                $totalShots = $session->shots->count();
+                $correctShots = $session->shots->where('is_correct', true)->count();
+                $wrongShots = $totalShots - $correctShots;
+                $accuracy = $totalShots > 0 ? round(($correctShots / $totalShots) * 100, 2) : 0;
+
+                return [
+                    'id' => $session->id,
+                    'user_id' => $session->user_id,
+                    'started_at' => $session->started_at,
+                    'finished_at' => $session->finished_at,
+                    'final_score' => $session->final_score,
+                    'max_level_reached' => $session->max_level_reached,
+                    'duration_seconds' => $session->duration_seconds,
+                    'canvas_width' => $session->canvas_width,
+                    'canvas_height' => $session->canvas_height,
+                    'total_shots' => $totalShots,
+                    'correct_shots' => $correctShots,
+                    'wrong_shots' => $wrongShots,
+                    'accuracy' => $accuracy,
+                    'created_at' => $session->created_at,
+                    'updated_at' => $session->updated_at,
+                ];
+            });
+
             return response()->json([
                 'success' => true,
                 'user' => [
@@ -91,7 +117,7 @@ class AdminController extends Controller
                     'profile' => $user->profile,
                     'group' => $user->group
                 ],
-                'data' => $sessions->items(),
+                'data' => $sessionsWithStats,
                 'pagination' => [
                     'total' => $sessions->total(),
                     'per_page' => $sessions->perPage(),
