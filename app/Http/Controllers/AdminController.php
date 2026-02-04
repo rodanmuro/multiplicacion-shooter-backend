@@ -234,6 +234,7 @@ class AdminController extends Controller
                     'row_number' => $rowNumber,
                     'id' => $session->id,
                     'user_id' => $session->user_id,
+                    'group_snapshot' => $session->group_snapshot,
                     'started_at' => $session->started_at,
                     'finished_at' => $session->finished_at,
                     'final_score' => $session->final_score,

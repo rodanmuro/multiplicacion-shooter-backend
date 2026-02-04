@@ -82,6 +82,7 @@ class GameSessionController extends Controller
         // Crear sesión de juego
         $session = GameSession::create([
             'user_id' => $user->id,
+            'group_snapshot' => $user->group, // Snapshot del grupo actual del usuario
             'started_at' => $validated['started_at'],
             'final_score' => 0,
             'max_level_reached' => 1,
