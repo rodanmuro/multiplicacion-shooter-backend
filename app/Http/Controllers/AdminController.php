@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\GameSession;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Validator;
 use Exception;
 
@@ -16,9 +17,47 @@ use Exception;
 class AdminController extends Controller
 {
     /**
-     * Lista todos los usuarios del sistema con paginación
+     * Obtiene la lista de grupos únicos en el sistema
+     *
+     * GET /api/admin/groups
+     *
+     * @return JsonResponse
+     */
+    public function getGroups(): JsonResponse
+    {
+        try {
+            $groups = User::whereNotNull('group')
+                ->where('group', '!=', '')
+                ->distinct()
+                ->orderBy('group')
+                ->pluck('group');
+
+            return response()->json([
+                'success' => true,
+                'data' => $groups
+            ], 200);
+
+        } catch (Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Error al obtener grupos',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Lista todos los usuarios del sistema con paginación y filtros
      *
      * GET /api/admin/users
+     *
+     * Query params:
+     * - group: Filtrar por grupo
+     * - profile: Filtrar por perfil (student, teacher, admin)
+     * - search: Buscar por nombre o email
+     * - per_page: Resultados por página (default 40)
+     * - sort_by: Campo por el cual ordenar (email, name, group, sessions_count, created_at)
+     * - order: Orden ascendente o descendente (asc, desc)
      *
      * @param Request $request
      * @return JsonResponse
@@ -26,14 +65,82 @@ class AdminController extends Controller
     public function listUsers(Request $request): JsonResponse
     {
         try {
+            $query = User::query();
+
+            // Filtro por grupo
+            if ($request->filled('group')) {
+                $query->where('group', $request->input('group'));
+            }
+
+            // Filtro por perfil
+            if ($request->filled('profile')) {
+                $query->where('profile', $request->input('profile'));
+            }
+
+            // Búsqueda por nombre o email
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                      ->orWhere('lastname', 'like', "%{$search}%")
+                      ->orWhere('email', 'like', "%{$search}%");
+                });
+            }
+
+            // Configurar ordenamiento
+            $sortBy = $request->input('sort_by', 'created_at');
+            $order = $request->input('order', 'desc');
+
+            // Validar dirección de orden
+            if (!in_array($order, ['asc', 'desc'])) {
+                $order = 'desc';
+            }
+
+            // Mapeo de campos permitidos para ordenamiento
+            $allowedSortFields = [
+                'email' => 'email',
+                'name' => 'name',
+                'group' => 'group',
+                'created_at' => 'created_at',
+                'sessions_count' => 'game_sessions_count'
+            ];
+
             // Obtener usuarios con conteo de sesiones
-            $users = User::withCount('gameSessions')
-                ->orderBy('created_at', 'desc')
-                ->paginate(15);
+            $perPage = $request->input('per_page', 40);
+            $query->withCount('gameSessions');
+
+            // Aplicar ordenamiento
+            if (isset($allowedSortFields[$sortBy])) {
+                $dbField = $allowedSortFields[$sortBy];
+                $query->orderBy($dbField, $order);
+            } else {
+                // Default: ordenar por fecha de creación
+                $query->orderBy('created_at', 'desc');
+            }
+
+            $users = $query->paginate($perPage);
+
+            // Agregar estadísticas por usuario
+            $usersWithStats = collect($users->items())->map(function ($user) {
+                // Obtener estadísticas de sesiones
+                $sessions = GameSession::where('user_id', $user->id)
+                    ->whereNotNull('finished_at')
+                    ->get();
+
+                $avgScore = $sessions->avg('final_score');
+                $bestScore = $sessions->max('final_score');
+                $lastSession = $sessions->sortByDesc('started_at')->first();
+
+                return array_merge($user->toArray(), [
+                    'avg_score' => $avgScore ? round($avgScore, 1) : null,
+                    'best_score' => $bestScore,
+                    'last_played_at' => $lastSession ? $lastSession->started_at : null,
+                ]);
+            });
 
             return response()->json([
                 'success' => true,
-                'data' => $users->items(),
+                'data' => $usersWithStats,
                 'pagination' => [
                     'total' => $users->total(),
                     'per_page' => $users->perPage(),
@@ -41,6 +148,11 @@ class AdminController extends Controller
                     'last_page' => $users->lastPage(),
                     'from' => $users->firstItem(),
                     'to' => $users->lastItem()
+                ],
+                'filters_applied' => [
+                    'group' => $request->input('group'),
+                    'profile' => $request->input('profile'),
+                    'search' => $request->input('search'),
                 ]
             ], 200);
 
@@ -54,9 +166,14 @@ class AdminController extends Controller
     }
 
     /**
-     * Obtiene las sesiones de un usuario específico
+     * Obtiene las sesiones de un usuario específico con filtros
      *
      * GET /api/admin/users/{userId}/sessions
+     *
+     * Query params:
+     * - date_from: Fecha inicio (YYYY-MM-DD)
+     * - date_to: Fecha fin (YYYY-MM-DD)
+     * - per_page: Resultados por página (default 10)
      *
      * @param Request $request
      * @param int $userId
@@ -75,20 +192,46 @@ class AdminController extends Controller
                 ], 404);
             }
 
-            // Obtener sesiones del usuario con paginación
-            $sessions = GameSession::where('user_id', $userId)
-                ->with('shots')
-                ->orderBy('started_at', 'desc')
-                ->paginate(10);
+            // Construir query con filtros de fecha
+            $query = GameSession::where('user_id', $userId)->with('shots');
+
+            // Filtro fecha desde
+            if ($request->filled('date_from')) {
+                $query->whereDate('started_at', '>=', $request->input('date_from'));
+            }
+
+            // Filtro fecha hasta
+            if ($request->filled('date_to')) {
+                $query->whereDate('started_at', '<=', $request->input('date_to'));
+            }
+
+            // Obtener sesiones con paginación
+            $perPage = $request->input('per_page', 10);
+            $sessions = $query->orderBy('started_at', 'desc')->paginate($perPage);
+
+            // Calcular estadísticas globales del usuario (con filtros aplicados)
+            $allFilteredSessions = (clone $query)->whereNotNull('finished_at')->get();
+            $summary = [
+                'total_sessions' => $allFilteredSessions->count(),
+                'avg_score' => $allFilteredSessions->avg('final_score') ? round($allFilteredSessions->avg('final_score'), 1) : 0,
+                'best_score' => $allFilteredSessions->max('final_score') ?? 0,
+                'total_playtime_minutes' => round($allFilteredSessions->sum('duration_seconds') / 60, 1),
+                'first_session' => $allFilteredSessions->min('started_at'),
+                'last_session' => $allFilteredSessions->max('started_at'),
+            ];
 
             // Agregar estadísticas calculadas a cada sesión
-            $sessionsWithStats = $sessions->getCollection()->map(function ($session) {
+            $sessionsWithStats = $sessions->getCollection()->map(function ($session, $index) use ($sessions) {
                 $totalShots = $session->shots->count();
                 $correctShots = $session->shots->where('is_correct', true)->count();
                 $wrongShots = $totalShots - $correctShots;
                 $accuracy = $totalShots > 0 ? round(($correctShots / $totalShots) * 100, 2) : 0;
 
+                // Calcular número de fila global
+                $rowNumber = (($sessions->currentPage() - 1) * $sessions->perPage()) + $index + 1;
+
                 return [
+                    'row_number' => $rowNumber,
                     'id' => $session->id,
                     'user_id' => $session->user_id,
                     'started_at' => $session->started_at,
@@ -117,12 +260,19 @@ class AdminController extends Controller
                     'profile' => $user->profile,
                     'group' => $user->group
                 ],
+                'summary' => $summary,
                 'data' => $sessionsWithStats,
                 'pagination' => [
                     'total' => $sessions->total(),
                     'per_page' => $sessions->perPage(),
                     'current_page' => $sessions->currentPage(),
-                    'last_page' => $sessions->lastPage()
+                    'last_page' => $sessions->lastPage(),
+                    'from' => $sessions->firstItem(),
+                    'to' => $sessions->lastItem()
+                ],
+                'filters_applied' => [
+                    'date_from' => $request->input('date_from'),
+                    'date_to' => $request->input('date_to'),
                 ]
             ], 200);
 
@@ -279,6 +429,157 @@ class AdminController extends Controller
                     'line' => $e->getLine()
                 ] : null
             ], 500);
+        }
+    }
+
+    /**
+     * Exporta la lista de usuarios a CSV
+     *
+     * GET /api/admin/export/users
+     *
+     * Query params: mismos filtros que listUsers
+     *
+     * @param Request $request
+     * @return Response
+     */
+    public function exportUsers(Request $request): Response
+    {
+        try {
+            $query = User::query();
+
+            // Aplicar filtros (igual que listUsers)
+            if ($request->filled('group')) {
+                $query->where('group', $request->input('group'));
+            }
+
+            if ($request->filled('profile')) {
+                $query->where('profile', $request->input('profile'));
+            }
+
+            if ($request->filled('search')) {
+                $search = $request->input('search');
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                      ->orWhere('lastname', 'like', "%{$search}%")
+                      ->orWhere('email', 'like', "%{$search}%");
+                });
+            }
+
+            $users = $query->withCount('gameSessions')
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            // Generar CSV
+            $csvContent = "Email,Nombre,Apellido,Perfil,Grupo,Sesiones,Promedio,Mejor Puntuacion,Ultima Sesion,Fecha Registro\n";
+
+            foreach ($users as $user) {
+                $sessions = GameSession::where('user_id', $user->id)
+                    ->whereNotNull('finished_at')
+                    ->get();
+
+                $avgScore = $sessions->avg('final_score') ? round($sessions->avg('final_score'), 1) : 0;
+                $bestScore = $sessions->max('final_score') ?? 0;
+                $lastSession = $sessions->sortByDesc('started_at')->first();
+                $lastPlayedAt = $lastSession ? date('Y-m-d H:i', strtotime($lastSession->started_at)) : '';
+
+                $csvContent .= sprintf(
+                    "%s,%s,%s,%s,%s,%d,%.1f,%d,%s,%s\n",
+                    $user->email,
+                    $user->name ?? '',
+                    $user->lastname ?? '',
+                    $user->profile,
+                    $user->group ?? '',
+                    $user->game_sessions_count,
+                    $avgScore,
+                    $bestScore,
+                    $lastPlayedAt,
+                    date('Y-m-d', strtotime($user->created_at))
+                );
+            }
+
+            $filename = 'usuarios_' . date('Y-m-d_H-i-s') . '.csv';
+
+            return response($csvContent, 200)
+                ->header('Content-Type', 'text/csv; charset=UTF-8')
+                ->header('Content-Disposition', "attachment; filename=\"{$filename}\"");
+
+        } catch (Exception $e) {
+            return response("Error al exportar: " . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Exporta las sesiones de un usuario a CSV
+     *
+     * GET /api/admin/export/users/{userId}/sessions
+     *
+     * Query params: date_from, date_to
+     *
+     * @param Request $request
+     * @param int $userId
+     * @return Response
+     */
+    public function exportUserSessions(Request $request, int $userId): Response
+    {
+        try {
+            $user = User::find($userId);
+
+            if (!$user) {
+                return response("Usuario no encontrado", 404);
+            }
+
+            $query = GameSession::where('user_id', $userId)->with('shots');
+
+            // Aplicar filtros de fecha
+            if ($request->filled('date_from')) {
+                $query->whereDate('started_at', '>=', $request->input('date_from'));
+            }
+
+            if ($request->filled('date_to')) {
+                $query->whereDate('started_at', '<=', $request->input('date_to'));
+            }
+
+            $sessions = $query->orderBy('started_at', 'desc')->get();
+
+            // Generar CSV
+            $userName = trim(($user->name ?? '') . ' ' . ($user->lastname ?? ''));
+            $csvContent = "# Sesiones de: {$userName} ({$user->email})\n";
+            $csvContent .= "# Grupo: " . ($user->group ?? 'N/A') . "\n";
+            $csvContent .= "# Exportado: " . date('Y-m-d H:i:s') . "\n";
+            $csvContent .= "#\n";
+            $csvContent .= "Numero,Fecha,Hora,Puntuacion,Nivel Maximo,Disparos Totales,Aciertos,Errores,Precision,Duracion (seg)\n";
+
+            $rowNum = 1;
+            foreach ($sessions as $session) {
+                $totalShots = $session->shots->count();
+                $correctShots = $session->shots->where('is_correct', true)->count();
+                $wrongShots = $totalShots - $correctShots;
+                $accuracy = $totalShots > 0 ? round(($correctShots / $totalShots) * 100, 2) : 0;
+
+                $csvContent .= sprintf(
+                    "%d,%s,%s,%d,%d,%d,%d,%d,%.2f%%,%d\n",
+                    $rowNum,
+                    date('Y-m-d', strtotime($session->started_at)),
+                    date('H:i:s', strtotime($session->started_at)),
+                    $session->final_score,
+                    $session->max_level_reached,
+                    $totalShots,
+                    $correctShots,
+                    $wrongShots,
+                    $accuracy,
+                    $session->duration_seconds
+                );
+                $rowNum++;
+            }
+
+            $filename = 'sesiones_' . preg_replace('/[^a-zA-Z0-9]/', '_', $user->email) . '_' . date('Y-m-d') . '.csv';
+
+            return response($csvContent, 200)
+                ->header('Content-Type', 'text/csv; charset=UTF-8')
+                ->header('Content-Disposition', "attachment; filename=\"{$filename}\"");
+
+        } catch (Exception $e) {
+            return response("Error al exportar: " . $e->getMessage(), 500);
         }
     }
 }

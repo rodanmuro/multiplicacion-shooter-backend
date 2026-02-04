@@ -88,8 +88,15 @@ Route::middleware('auth.google')->group(function () {
 
 // Rutas de administración (requiere auth.google + require.admin)
 Route::middleware(['auth.google', 'require.admin'])->prefix('admin')->group(function () {
+    // Grupos
+    Route::get('/groups', [AdminController::class, 'getGroups']);
+
     // Gestión de usuarios
     Route::get('/users', [AdminController::class, 'listUsers']);
     Route::get('/users/{userId}/sessions', [AdminController::class, 'getUserSessions']);
     Route::post('/users/upload-csv', [AdminController::class, 'uploadCsv']);
+
+    // Exportación CSV
+    Route::get('/export/users', [AdminController::class, 'exportUsers']);
+    Route::get('/export/users/{userId}/sessions', [AdminController::class, 'exportUserSessions']);
 });
